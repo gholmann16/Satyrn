@@ -6,7 +6,7 @@
 
 char * get_local_appimage(char * name) {
     char * home = getenv("HOME");
-    char * file = strrchr(name, '/') + 1;
+    char * file = (strrchr(name, '/')) ? strrchr(name, '/') + 1: name;
 
     if (!home) {
         puts("Can't find home environment variable.");
@@ -33,16 +33,16 @@ char * get_local_appimage(char * name) {
     return location;
 }
 
-void sat_install(char * appimage) {
+int sat_install(char * appimage) {
     char * path = realpath(appimage, NULL);
     if (!path) {
         puts("File does not exist");
-        return;
+        return 1;
     }
     else if (appimage_get_type(path, true) == -1) {
         printf("File %s is not an AppImage.\n", appimage);
         free(path);
-        return;
+        return 1;
     }
 
     char * newpath = get_local_appimage(path);
@@ -55,24 +55,21 @@ void sat_install(char * appimage) {
     
     free(path);
     free(newpath);
-    return;
+    return 0;
 }
 
-void sat_remove(char * appimage) {
-    char * path = realpath(appimage, NULL);
-    char * newpath = get_local_appimage(path);
+int sat_remove(char * appimage) {
+    char * path = get_local_appimage(appimage);
     
-    if (appimage_is_registered_in_system(newpath) == false)
+    if (appimage_is_registered_in_system(path) == false)
         printf("AppImage %s is not installed.\n", appimage);
-    else if(appimage_unregister_in_system(appimage, true))
+    else if(appimage_unregister_in_system(path, true))
         puts("Something went wrong while removing AppImage.");
 
     free(path);
-    free(newpath);
-    return;
-
+    return 0;
 }
 
-void sat_list() {
-    system("cd ~/.local/bin && du --block-size=MB * | sort -hr");
+int sat_list() {
+    return system("cd ~/.local/bin && du --block-size=MB * | sort -hr");
 }

@@ -1,7 +1,7 @@
 // Functions that work with the filesystem
 
-void sat_install(char * appimage);
+int sat_install(char * appimage);
 
-void sat_remove(char * appimage);
+int sat_remove(char * appimage);
 
-void sat_list();
+int sat_list();
