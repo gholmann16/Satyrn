@@ -1,7 +1,7 @@
 // Functions that work with the filesystem
 
-int sat_install(char * appimage);
+int nep_install(char * appimage);
 
-int sat_remove(char * appimage);
+int nep_remove(char * appimage);
 
-int sat_list();
+int nep_list();

@@ -3,22 +3,23 @@
 #include <limits.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <math.h>
 
-char * get_local_appimage(char * name) {
+char * get_path(char * path) {
     char * home = getenv("HOME");
-    char * file = (strrchr(name, '/')) ? strrchr(name, '/') + 1: name;
 
     if (!home) {
         puts("Can't find home environment variable.");
         return NULL;
     }
-    if (strlen(home) + strlen("/.local/bin") + strlen(file) >= PATH_MAX) {
-        puts("The name of your AppImage folder plus the name of your AppImage exceeds the maximum allowed path limit on your system.");
+    else if (strlen(home) + strlen("/.local/bin/") >= PATH_MAX) {
+        puts("Path to app folder exceeds maximum path capacity.");
         return NULL;
     }
 
     char * location = malloc(PATH_MAX);
-
     strcpy(location, home);
     strcat(location, "/.local/bin/");
 
@@ -29,11 +30,23 @@ char * get_local_appimage(char * name) {
             return NULL;
         }
 
-    strcat(location, file);
+    if (path) {
+        char * name = (strrchr(path, '/')) ? strrchr(path, '/') + 1: path;
+
+        if (strlen(location) + strlen(name) >= PATH_MAX) {
+            puts("Path to app exceeds maximum path capacity.");
+            free(location);
+            return NULL;
+        }
+        else {
+            strcat(location, name);
+        }
+    }
+
     return location;
 }
 
-int sat_install(char * appimage) {
+int nep_install(char * appimage) {
     char * path = realpath(appimage, NULL);
     if (!path) {
         puts("File does not exist");
@@ -45,7 +58,7 @@ int sat_install(char * appimage) {
         return 1;
     }
 
-    char * newpath = get_local_appimage(path);
+    char * newpath = get_path(path);
     if (appimage_is_registered_in_system(newpath) == true)
         printf("AppImage %s is already installed.\n", appimage);
     else if (rename(path, newpath) == -1)
@@ -58,18 +71,75 @@ int sat_install(char * appimage) {
     return 0;
 }
 
-int sat_remove(char * appimage) {
-    char * path = get_local_appimage(appimage);
+int nep_remove(char * appimage) {
+    char * path = get_path(appimage);
     
     if (appimage_is_registered_in_system(path) == false)
         printf("AppImage %s is not installed.\n", appimage);
     else if(appimage_unregister_in_system(path, true))
         puts("Something went wrong while removing AppImage.");
+    else if(remove(path))
+        puts("Could not remove AppImage");
+    else {
+        free(path);
+        return 0;
+    }
 
     free(path);
-    return 0;
+    return 1;
 }
 
-int sat_list() {
-    return system("cd ~/.local/bin && du --block-size=MB * | sort -hr");
+void human_readable_print(char * name, off_t filesize) {
+    if (!filesize) {
+        printf("0B\t%s\n", name);
+        return;
+    }
+
+    char * fmt[] = {"%.1lf%cB\t%s\n", "%.0lf%cB\t%s\n", ">999QB\t%s\n"};
+    char suffix[] = {0, 'K', 'M', 'B', 'T', 'Q'};
+
+    // All 32 bit integers can be represented in a double, 
+    // but also accuracy doesn't matter as only measuring digits 
+    double value = (double)filesize;
+    int digits = (int)ceil(log10(value));
+    int choice = (digits - 1) / 3;
+    
+    if (choice >= sizeof(suffix))
+        printf(fmt[2], name);
+    value /= pow(1000.0, choice);
+
+    if (choice == 1)
+        printf(fmt[0], value, suffix[choice], name);
+    else
+        printf(fmt[1], value, suffix[choice], name);
+
+    return;
+}
+
+int nep_list() {
+
+    char * location = get_path(NULL);
+    DIR * apps = opendir(location);
+    free(location);
+    int dir_fd = dirfd(apps);
+
+    if (!apps) {
+        puts("Could not open ~/.local/bin");
+        return 1;
+    }
+
+    struct dirent * app;
+    struct stat buf;
+
+    while ((app = readdir(apps)) != NULL) {
+        if (app->d_name[0] == '.')
+            continue;
+        if (fstatat(dir_fd, app->d_name, &buf, 0) == -1) {
+            printf("Cannot open %s\n", app->d_name);
+            continue;
+        }
+        human_readable_print(app->d_name, buf.st_size);
+    }
+
+    return 0;
 }
